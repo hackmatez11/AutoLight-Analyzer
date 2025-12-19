@@ -1,0 +1,308 @@
+{% extends 'lighting/base.html' %}
+
+{% block title %}Results - {{ cad_file.project_name }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="display-5">
+                        <i class="bi bi-clipboard-data"></i> Analysis Results
+                    </h1>
+                    <p class="lead text-muted">{{ cad_file.project_name }}</p>
+                </div>
+                <div>
+                    <a href="{% url 'lighting:dashboard' %}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> Back to Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Project Info -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Project Information</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>File:</strong> {{ cad_file.filename }}</p>
+                            <p><strong>Uploaded:</strong> {{ cad_file.uploaded_at|date:"Y-m-d H:i" }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Rooms:</strong> {{ rooms.count }}</p>
+                            <p><strong>Status:</strong> 
+                                <span class="badge bg-success">{{ cad_file.get_status_display }}</span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-primary text-white">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Total Project Cost</h5>
+                    <h2 class="display-4">${{ total_price|floatformat:2 }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Room Details -->
+    {% for room in rooms %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h4 class="mb-0">
+                <i class="bi bi-door-open"></i> {{ room.name }}
+            </h4>
+        </div>
+        <div class="card-body">
+            <div class="row mb-3">
+                <div class="col-md-3">
+                    <p class="mb-1"><strong>Area:</strong> {{ room.area|floatformat:2 }} m²</p>
+                </div>
+                <div class="col-md-3">
+                    <p class="mb-1"><strong>Height:</strong> {{ room.height|floatformat:2 }} m</p>
+                </div>
+                <div class="col-md-3">
+                    <p class="mb-1"><strong>Required Lux:</strong> {{ room.required_lux|floatformat:0 }} lux</p>
+                </div>
+                <div class="col-md-3">
+                    <p class="mb-1">
+                        <strong>Current Lux:</strong> {{ room.current_lux|floatformat:0 }} lux
+                        {% if room.is_adequately_lit %}
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                        {% else %}
+                            <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Fixtures Table -->
+    <div class="card mb-4" id="quotationContent">
+        <div class="card-header">
+            <h4 class="mb-0">
+                <i class="bi bi-lightbulb-fill"></i> Detected Fixtures & Quotation
+            </h4>
+        </div>
+        <div class="card-body">
+            {% if lights %}
+            <div class="table-responsive">
+                <table class="table table-hover table-striped" id="fixturesTable">
+                    <thead>
+                        <tr>
+                            <th>Room</th>
+                            <th>Detected Symbol</th>
+                            <th>Selected Model</th>
+                            <th>Lumens</th>
+                            <th>Wattage</th>
+                            <th>Unit Price</th>
+                            <th>Quantity</th>
+                            <th>Total Price</th>
+                            <th>Alternatives</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for light in lights %}
+                        <tr data-fixture-row="{{ forloop.counter }}">
+                            <td><strong>{{ light.room }}</strong></td>
+                            <td>
+                                <code>{{ light.dxf_block_name }}</code>
+                            </td>
+                            <td>
+                                <strong>{{ light.selected.brand }}</strong><br>
+                                <small>{{ light.selected.model_number }}</small>
+                            </td>
+                            <td>{{ light.selected.lumens }} lm</td>
+                            <td>{{ light.selected.wattage }} W</td>
+                            <td class="unit-price">${{ light.unit_price|floatformat:2 }}</td>
+                            <td><strong>{{ light.quantity }}</strong></td>
+                            <td class="total-price">
+                                <strong>${{ light.total_price|floatformat:2 }}</strong>
+                            </td>
+                            <td>
+                                {% if light.recommendations %}
+                                <button class="btn btn-sm btn-outline-primary" 
+                                        type="button" 
+                                        data-bs-toggle="collapse" 
+                                        data-bs-target="#recommendations-{{ forloop.counter }}">
+                                    <i class="bi bi-eye"></i> View ({{ light.recommendations|length }})
+                                </button>
+                                {% else %}
+                                <span class="text-muted">None</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% if light.recommendations %}
+                        <tr class="collapse" id="recommendations-{{ forloop.counter }}">
+                            <td colspan="9" class="bg-light">
+                                <div class="p-3">
+                                    <h6>Alternative Fixtures:</h6>
+                                    <div class="row">
+                                        {% for rec in light.recommendations %}
+                                        <div class="col-md-4 mb-2">
+                                            <div class="card">
+                                                <div class="card-body p-2">
+                                                    <h6 class="card-title mb-1">{{ rec.brand }} {{ rec.model_number }}</h6>
+                                                    <p class="small mb-1">
+                                                        <strong>Lumens:</strong> {{ rec.lumens }} lm<br>
+                                                        <strong>Wattage:</strong> {{ rec.wattage }} W<br>
+                                                        <strong>Price:</strong> ${{ rec.unit_cost|floatformat:2 }}
+                                                    </p>
+                                                    <button class="btn btn-sm btn-success select-alternative"
+                                                            data-fixture-id="{{ light.selected.id }}"
+                                                            data-catalog-id="{{ rec.id }}"
+                                                            data-row="{{ forloop.parentloop.counter }}">
+                                                        <i class="bi bi-check"></i> Select
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="table-primary">
+                            <td colspan="7" class="text-end"><strong>Grand Total:</strong></td>
+                            <td colspan="2">
+                                <h5 class="mb-0" id="grandTotal">${{ total_price|floatformat:2 }}</h5>
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i> No fixtures detected in this CAD file.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title mb-3">Export Options</h5>
+                    <button class="btn btn-danger btn-lg me-2" onclick="downloadQuotationPDF()">
+                        <i class="bi bi-file-pdf"></i> Download as PDF
+                    </button>
+                    <a href="{% url 'lighting:generate_report' cad_file.id 'csv' %}" 
+                       class="btn btn-success btn-lg me-2">
+                        <i class="bi bi-file-earmark-spreadsheet"></i> Download as CSV
+                    </a>
+                    <a href="{% url 'lighting:generate_report' cad_file.id 'pdf' %}" 
+                       class="btn btn-primary btn-lg">
+                        <i class="bi bi-file-text"></i> Full Report (PDF)
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Function to download quotation as PDF using html2pdf
+    function downloadQuotationPDF() {
+        const element = document.getElementById('quotationContent');
+        const opt = {
+            margin: 10,
+            filename: '{{ cad_file.project_name }}_quotation.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+        };
+        
+        // Show loading
+        const originalContent = element.innerHTML;
+        element.innerHTML = '<div class="text-center p-5"><div class="spinner-border" role="status"></div><p>Generating PDF...</p></div>';
+        
+        html2pdf().set(opt).from(element).save().then(() => {
+            element.innerHTML = originalContent;
+            // Re-attach event listeners
+            attachAlternativeListeners();
+        });
+    }
+
+    // Function to update fixture selection
+    function selectAlternative(fixtureId, catalogId, rowNumber) {
+        fetch('{% url "lighting:update_fixture" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                fixture_id: fixtureId,
+                catalog_id: catalogId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update the row
+                const row = document.querySelector(`[data-fixture-row="${rowNumber}"]`);
+                row.querySelector('.unit-price').textContent = '$' + data.unit_price.toFixed(2);
+                row.querySelector('.total-price strong').textContent = '$' + data.new_total_price.toFixed(2);
+                
+                // Recalculate grand total
+                updateGrandTotal();
+                
+                // Show success message
+                alert('Fixture updated successfully!');
+            } else {
+                alert('Error updating fixture: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while updating the fixture.');
+        });
+    }
+
+    // Function to update grand total
+    function updateGrandTotal() {
+        let total = 0;
+        document.querySelectorAll('.total-price strong').forEach(el => {
+            const price = parseFloat(el.textContent.replace('$', ''));
+            total += price;
+        });
+        document.getElementById('grandTotal').textContent = '$' + total.toFixed(2);
+    }
+
+    // Attach event listeners to alternative selection buttons
+    function attachAlternativeListeners() {
+        document.querySelectorAll('.select-alternative').forEach(button => {
+            button.addEventListener('click', function() {
+                const fixtureId = this.getAttribute('data-fixture-id');
+                const catalogId = this.getAttribute('data-catalog-id');
+                const rowNumber = this.getAttribute('data-row');
+                selectAlternative(fixtureId, catalogId, rowNumber);
+            });
+        });
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        attachAlternativeListeners();
+    });
+</script>
+{% endblock %}

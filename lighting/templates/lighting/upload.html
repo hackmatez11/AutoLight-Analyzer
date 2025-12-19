@@ -1,0 +1,171 @@
+{% extends 'lighting/base.html' %}
+
+{% block title %}Upload CAD File - AutoLight Analyser{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="mb-0">
+                        <i class="bi bi-upload"></i> Upload CAD File
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        Upload a .dwg or .dxf file to analyze lighting fixtures and generate reports.
+                    </p>
+
+                    <form method="post" enctype="multipart/form-data" id="uploadForm">
+                        {% csrf_token %}
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.project_name.id_for_label }}" class="form-label">
+                                <strong>Project Name</strong> <span class="text-danger">*</span>
+                            </label>
+                            {{ form.project_name }}
+                            {% if form.project_name.errors %}
+                                <div class="text-danger small">{{ form.project_name.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.file.id_for_label }}" class="form-label">
+                                <strong>CAD File (.dwg or .dxf)</strong> <span class="text-danger">*</span>
+                            </label>
+                            {{ form.file }}
+                            {% if form.file.errors %}
+                                <div class="text-danger small">{{ form.file.errors }}</div>
+                            {% endif %}
+                            <div class="form-text">
+                                Accepted formats: .dwg, .dxf | Maximum size: 50MB
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.legend_json.id_for_label }}" class="form-label">
+                                <strong>Symbol Legend (Optional)</strong>
+                            </label>
+                            {{ form.legend_json }}
+                            {% if form.legend_json.errors %}
+                                <div class="text-danger small">{{ form.legend_json.errors }}</div>
+                            {% endif %}
+                            <div class="form-text">
+                                {{ form.legend_json.help_text }}
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar (hidden by default) -->
+                        <div class="mb-3" id="progressContainer" style="display: none;">
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                     role="progressbar" 
+                                     id="uploadProgress"
+                                     style="width: 0%">
+                                    0%
+                                </div>
+                            </div>
+                            <p class="text-center mt-2 text-muted">Processing your file...</p>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
+                                <i class="bi bi-cloud-upload"></i> Upload and Analyze
+                            </button>
+                            <a href="{% url 'lighting:dashboard' %}" class="btn btn-secondary">
+                                <i class="bi bi-x-circle"></i> Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Help Section -->
+            <div class="card mt-4">
+                <div class="card-header bg-info text-white">
+                    <i class="bi bi-info-circle"></i> How to Use
+                </div>
+                <div class="card-body">
+                    <ol>
+                        <li class="mb-2">
+                            <strong>Prepare your CAD file:</strong> Ensure your .dwg or .dxf file contains 
+                            lighting fixture symbols as block inserts.
+                        </li>
+                        <li class="mb-2">
+                            <strong>Enter project name:</strong> Give your project a descriptive name for 
+                            easy identification.
+                        </li>
+                        <li class="mb-2">
+                            <strong>Select file:</strong> Choose your CAD file (max 50MB).
+                        </li>
+                        <li class="mb-2">
+                            <strong>Optional - Symbol Legend:</strong> If your CAD symbols don't match our 
+                            catalog exactly, provide a JSON mapping. Example:
+                            <pre class="bg-light p-2 mt-2"><code>{
+  "LIGHT_TYPE_A": "LED_PANEL_600X600",
+  "LIGHT_TYPE_B": "DOWNLIGHT_12W"
+}</code></pre>
+                        </li>
+                        <li>
+                            <strong>Upload:</strong> Click "Upload and Analyze" to process your file.
+                        </li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Show progress bar on form submit
+    document.getElementById('uploadForm').addEventListener('submit', function(e) {
+        const progressContainer = document.getElementById('progressContainer');
+        const submitBtn = document.getElementById('submitBtn');
+        const progressBar = document.getElementById('uploadProgress');
+        
+        // Show progress container
+        progressContainer.style.display = 'block';
+        
+        // Disable submit button
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
+        
+        // Simulate progress (since actual upload progress is hard to track without AJAX)
+        let progress = 0;
+        const interval = setInterval(() => {
+            progress += 5;
+            if (progress <= 90) {
+                progressBar.style.width = progress + '%';
+                progressBar.textContent = progress + '%';
+            }
+        }, 500);
+        
+        // Note: In production, you'd use AJAX with XMLHttpRequest.upload.onprogress
+        // to track real upload progress
+    });
+
+    // File validation
+    document.getElementById('{{ form.file.id_for_label }}').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const fileSize = file.size / 1024 / 1024; // MB
+            const fileName = file.name.toLowerCase();
+            
+            if (fileSize > 50) {
+                alert('File size exceeds 50MB limit!');
+                e.target.value = '';
+                return;
+            }
+            
+            if (!fileName.endsWith('.dwg') && !fileName.endsWith('.dxf')) {
+                alert('Only .dwg and .dxf files are allowed!');
+                e.target.value = '';
+                return;
+            }
+        }
+    });
+</script>
+{% endblock %}
