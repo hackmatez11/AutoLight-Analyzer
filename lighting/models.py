@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
 
 
 class LightingCatalog(models.Model):
@@ -57,7 +58,10 @@ class Room(models.Model):
     """Room detected from CAD file"""
     cad_file = models.ForeignKey(CADFile, on_delete=models.CASCADE, related_name='rooms')
     name = models.CharField(max_length=100)
-    area = models.FloatField(validators=[MinValueValidator(0)], help_text="Area in square meters")
+    area = models.FloatField(
+        validators=[MinValueValidator(0.1), MaxValueValidator(10000.0)], 
+        help_text="Area in square meters (0.1 - 10,000 m²)"
+    )
     height = models.FloatField(validators=[MinValueValidator(0)], help_text="Height in meters", default=3.0)
     required_lux = models.FloatField(validators=[MinValueValidator(0)], default=300, help_text="Required illuminance in lux")
     
@@ -68,6 +72,14 @@ class Room(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.area}m²)"
+    
+    def clean(self):
+        """Validate room data"""
+        super().clean()
+        if self.area < 0.1:
+            raise ValidationError({'area': 'Room area must be at least 0.1 m²'})
+        if self.area > 10000:
+            raise ValidationError({'area': 'Room area cannot exceed 10,000 m²'})
 
     @property
     def total_lumens_required(self):
@@ -77,10 +89,26 @@ class Room(models.Model):
     @property
     def current_lux(self):
         """Calculate current lux based on installed fixtures"""
+        # Guard against zero area
+        if self.area <= 0:
+            return 0.0
+        
+        # Calculate total lumens from all fixtures
         total_lumens = sum(fixture.total_lumens for fixture in self.fixtures.all())
-        if self.area > 0:
-            return total_lumens / self.area
-        return 0
+        
+        # Guard against no fixtures
+        if total_lumens == 0:
+            return 0.0
+        
+        # Apply lighting efficiency factor (accounting for losses, reflections, etc.)
+        # Typical efficiency factor is 0.6-0.8 for indoor spaces
+        efficiency_factor = 0.7
+        effective_lumens = total_lumens * efficiency_factor
+        
+        # Calculate lux (lumens per square meter)
+        lux = effective_lumens / self.area
+        
+        return round(lux, 2)
 
     @property
     def is_adequately_lit(self):
