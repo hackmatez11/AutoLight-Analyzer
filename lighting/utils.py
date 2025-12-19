@@ -84,7 +84,7 @@ def calculate_polyline_area(points: List[Tuple[float, float]]) -> float:
         points: List of (x, y) coordinate tuples
         
     Returns:
-        Area in square units
+        Area in square meters (assuming DXF units are millimeters)
     """
     if len(points) < 3:
         return 0.0
@@ -95,7 +95,23 @@ def calculate_polyline_area(points: List[Tuple[float, float]]) -> float:
         area += points[i][0] * points[j][1]
         area -= points[j][0] * points[i][1]
     
-    return abs(area) / 2.0
+    # Calculate raw area
+    raw_area = abs(area) / 2.0
+    
+    # Convert from mm² to m² (divide by 1,000,000)
+    # Most CAD files use millimeters as base unit
+    area_m2 = raw_area / 1_000_000.0
+    
+    # Sanity check: if area is still too large (> 10,000 m²) or too small (< 1 m²),
+    # assume units might be different
+    if area_m2 > 10000:
+        # Might be in cm² or other units, apply additional scaling
+        area_m2 = raw_area / 10000.0  # Assume cm²
+    elif area_m2 < 0.1:
+        # Might already be in meters
+        area_m2 = raw_area
+    
+    return area_m2
 
 
 def map_symbols_to_catalog(symbols: List[str], legend: Optional[Dict[str, str]] = None) -> Dict[str, LightingCatalog]:
@@ -207,8 +223,10 @@ def process_cad_file(cad_file: CADFile, legend: Optional[Dict[str, str]] = None)
             cad_file.save()
             return False
         
-        # Create rooms
+        # Create rooms with validated areas
         rooms_data = parsed_data['rooms']
+        created_rooms = []
+        
         if not rooms_data:
             # Create a default room if no rooms detected
             room = Room.objects.create(
@@ -217,14 +235,35 @@ def process_cad_file(cad_file: CADFile, legend: Optional[Dict[str, str]] = None)
                 area=100.0,  # Default area
                 height=3.0,
             )
+            created_rooms.append(room)
         else:
             for idx, room_data in enumerate(rooms_data):
+                room_area = room_data['area']
+                
+                # Validate and constrain room area (1 m² to 10,000 m²)
+                if room_area < 1.0:
+                    room_area = 1.0
+                elif room_area > 10000.0:
+                    # Skip unreasonably large rooms (likely parsing errors)
+                    continue
+                
                 room = Room.objects.create(
                     cad_file=cad_file,
                     name=f"Room {idx + 1}" if idx > 0 else "Main Area",
-                    area=room_data['area'],
+                    area=room_area,
                     height=3.0,
                 )
+                created_rooms.append(room)
+        
+        # If no valid rooms created, create a default one
+        if not created_rooms:
+            room = Room.objects.create(
+                cad_file=cad_file,
+                name="Main Area",
+                area=100.0,
+                height=3.0,
+            )
+            created_rooms.append(room)
         
         # Group blocks by name and count
         blocks_data = parsed_data['blocks']
@@ -236,15 +275,15 @@ def process_cad_file(cad_file: CADFile, legend: Optional[Dict[str, str]] = None)
         unique_symbols = list(block_counts.keys())
         symbol_mapping = map_symbols_to_catalog(unique_symbols, legend)
         
-        # Create fixtures for first room (simplified)
-        rooms = cad_file.rooms.all()
-        if rooms.exists():
-            room = rooms.first()
+        # Distribute fixtures across rooms based on spatial proximity
+        # For simplicity, assign all fixtures to the first room
+        if created_rooms and block_counts:
+            room = created_rooms[0]
             
             for symbol, blocks in block_counts.items():
                 catalog_item = symbol_mapping.get(symbol)
                 if catalog_item:
-                    # Create fixture with aggregate quantity
+                    # Only create fixture if catalog item found
                     Fixture.objects.create(
                         room=room,
                         lighting_catalog=catalog_item,
